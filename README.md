@@ -1,9 +1,10 @@
 # catcher
-A simple app to distract a cat or a kid.
+A simple "catch me" game for cats.
 
-A black screen with one glowing button that sits somewhere random. Touch near it and it
-reacts; after 2–3 touches it shrinks away and pops up somewhere else a couple of seconds
-later, as the next design. Nothing else on the screen responds to touches.
+A black screen with one glowing target that sits somewhere random. Paw (or touch) near it
+and it reacts; after 2–3 hits it shrinks away and pops up somewhere else a couple of seconds
+later, as the next design. Nothing else on the screen responds to touches, so stray paws
+can't open or change anything.
 
 ## Designs
 
@@ -43,6 +44,7 @@ choose `main` and `/ (root)`. Then open the page on the phone:
 
 After the first open it also works offline.
 
-The page can't block the system home/back gestures. To keep the phone inside the app, use
+The page can't block the system home/back gestures, which a cat can trigger by accident.
+To keep the device inside the app, use
 **Screen pinning** on Android (Settings → Security → App pinning) or **Guided Access** on
 iPhone (Settings → Accessibility → Guided Access, then triple-click the side button).
