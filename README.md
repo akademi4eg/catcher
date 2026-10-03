@@ -1,2 +1,33 @@
 # catcher
 A simple app to distract a cat or a kid.
+
+A black screen with one glowing button that sits somewhere random. Touch near it and it
+reacts; after 2–3 touches it shrinks away and pops up somewhere else a couple of seconds
+later, as the next design. Nothing else on the screen responds to touches.
+
+## Designs
+
+| `?d=` value   | Idle                               | On touch                                     |
+|---------------|------------------------------------|----------------------------------------------|
+| `fingerprint` | cyan fingerprint, slowly breathing | bright waves run through the ridges, ripples |
+| `orb`         | soft glowing ball, random colour   | jelly bounce plus three coloured rings       |
+| `star`        | slowly turning yellow star         | spins, grows and throws out little stars     |
+| `flower`      | ring of rainbow dots, rotating     | dots spread out and come back                |
+
+By default it cycles through all of them. Preview one with `index.html?d=orb`, or pick a
+set with `index.html?d=fingerprint,star`. To change what the home screen app shows, edit
+`ALL_DESIGNS` at the top of the script in `index.html`.
+
+## Hosting and installing
+
+It's a static site, so GitHub Pages works: Settings → Pages → "Deploy from a branch",
+choose `main` and `/ (root)`. Then open the page on the phone:
+
+- **Android (Chrome):** menu ⋮ → "Add to Home screen" / "Install app". Opens full screen.
+- **iPhone (Safari):** Share → "Add to Home Screen". Opens without browser bars.
+
+After the first open it also works offline.
+
+The page can't block the system home/back gestures. To keep the phone inside the app, use
+**Screen pinning** on Android (Settings → Security → App pinning) or **Guided Access** on
+iPhone (Settings → Accessibility → Guided Access, then triple-click the side button).

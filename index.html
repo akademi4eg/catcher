@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Catcher">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>Catcher</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+"use strict";
+
+// Designs to cycle through. Preview a single one with ?d=fingerprint (or ?d=orb,star).
+const ALL_DESIGNS = ["fingerprint", "orb", "star", "flower"];
+
+const TAPS_MIN = 2, TAPS_MAX = 3;   // taps before the button jumps away
+const HIDDEN_MS = [1500, 2500];     // how long the screen stays empty
+const REACT_MS = 900, APPEAR_MS = 450, LEAVE_MS = 400;
+const NEAR = 1.8;                   // touch counts if within NEAR * radius
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, R = 40;
+
+const TAU = Math.PI * 2;
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp01 = x => Math.max(0, Math.min(1, x));
+const easeOutBack = x => 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2);
+const easeOut = x => 1 - Math.pow(1 - x, 3);
+
+// ---------- designs ----------
+// draw(b, now): b.x, b.y, b.hue, b.react (0..1 or null), b.seed, b.parts
+
+function fingerprintRidges(seed) {
+  // Deterministic broken ellipses that read as a fingerprint.
+  let s = seed;
+  const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+  const ridges = [];
+  for (let i = 0; i < 7; i++) {
+    const k = 0.16 + i * 0.12;
+    const segs = [];
+    const gap = 0.35 + rnd() * 0.5;                 // opening at the bottom
+    let a = Math.PI / 2 + gap / 2;
+    const end = Math.PI / 2 + TAU - gap / 2;
+    while (a < end) {
+      const len = 0.8 + rnd() * 2.2;
+      const b = Math.min(end, a + len);
+      segs.push([a, b]);
+      a = b + 0.18 + rnd() * 0.25;
+    }
+    ridges.push({ k, segs });
+  }
+  return ridges;
+}
+
+const DESIGNS = {
+  fingerprint: {
+    init(b) { b.ridges = fingerprintRidges(Math.floor(rand(1, 99999))); },
+    draw(b, now) {
+      const r = R, p = b.react;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.scale(b.scale, b.scale);
+      const breathe = 0.5 + 0.5 * Math.sin(now / 900);
+
+      // ripple rings on touch
+      if (p !== null) {
+        for (let j = 0; j < 2; j++) {
+          const q = clamp01(p * 1.3 - j * 0.3);
+          if (q <= 0 || q >= 1) continue;
+          ctx.beginPath();
+          ctx.arc(0, 0, r * (1 + q * 1.4), 0, TAU);
+          ctx.strokeStyle = `hsla(185, 100%, 70%, ${0.7 * (1 - q)})`;
+          ctx.lineWidth = r * 0.06 * (1 - q) + 1;
+          ctx.stroke();
+        }
+      }
+
+      // outer ring
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.08, 0, TAU);
+      ctx.strokeStyle = `hsla(185, 80%, 60%, ${0.15 + 0.1 * breathe})`;
+      ctx.lineWidth = r * 0.03;
+      ctx.stroke();
+
+      ctx.lineCap = "round";
+      ctx.lineWidth = r * 0.06;
+      ctx.shadowColor = "hsl(185, 100%, 60%)";
+      b.ridges.forEach((rd, i) => {
+        let glow = 0.35 + 0.25 * breathe;
+        if (p !== null) {
+          // a bright wave runs from the centre outwards, twice
+          const wave = (p * 2) % 1;
+          const d = wave * 1.3 - i / 6;
+          glow = Math.max(glow, Math.exp(-(d * d) / 0.02) * (1 - p * 0.4));
+        }
+        ctx.strokeStyle = `hsla(185, 100%, ${55 + 40 * glow}%, ${0.35 + 0.65 * glow})`;
+        ctx.shadowBlur = r * 0.35 * glow;
+        for (const [a0, a1] of rd.segs) {
+          ctx.beginPath();
+          ctx.ellipse(0, r * 0.05, r * rd.k * 0.82, r * rd.k, 0, a0, a1);
+          ctx.stroke();
+        }
+      });
+      ctx.restore();
+    },
+  },
+
+  orb: {
+    init(b) { b.hue = rand(0, 360); },
+    draw(b, now) {
+      const p = b.react;
+      let s = 1 + 0.05 * Math.sin(now / 600);
+      if (p !== null) s *= 1 + 0.35 * Math.sin(p * Math.PI * 3) * (1 - p);
+      const r = R * s;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.scale(b.scale, b.scale);
+
+      if (p !== null) {
+        for (let j = 0; j < 3; j++) {
+          const q = clamp01(p * 1.5 - j * 0.25);
+          if (q <= 0 || q >= 1) continue;
+          ctx.beginPath();
+          ctx.arc(0, 0, R * (1 + q * 1.8), 0, TAU);
+          ctx.strokeStyle = `hsla(${b.hue + j * 40}, 100%, 65%, ${0.8 * (1 - q)})`;
+          ctx.lineWidth = R * 0.12 * (1 - q) + 1;
+          ctx.stroke();
+        }
+      }
+
+      const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.05, 0, 0, r * 1.5);
+      const light = p !== null ? 75 + 15 * (1 - p) : 70;
+      g.addColorStop(0, `hsla(${b.hue}, 100%, 95%, 1)`);
+      g.addColorStop(0.35, `hsla(${b.hue}, 100%, ${light}%, 1)`);
+      g.addColorStop(0.66, `hsla(${b.hue}, 100%, 45%, 0.6)`);
+      g.addColorStop(1, `hsla(${b.hue}, 100%, 40%, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.5, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    },
+  },
+
+  star: {
+    init(b) { b.hue = rand(40, 55); b.parts = []; },
+    onTap(b) {
+      b.parts = [];
+      for (let i = 0; i < 14; i++) {
+        b.parts.push({ a: rand(0, TAU), v: rand(1.4, 2.6), s: rand(0.18, 0.32), h: rand(0, 360) });
+      }
+    },
+    draw(b, now) {
+      const p = b.react;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.scale(b.scale, b.scale);
+
+      if (p !== null) {
+        for (const pt of b.parts) {
+          const d = R * (0.6 + pt.v * easeOut(p));
+          ctx.fillStyle = `hsla(${pt.h}, 100%, 70%, ${1 - p})`;
+          drawStar(Math.cos(pt.a) * d, Math.sin(pt.a) * d, R * pt.s * (1 - p * 0.5), p * 6);
+        }
+      }
+
+      let rot = now / 3000, s = 1 + 0.06 * Math.sin(now / 400);
+      if (p !== null) { rot += easeOut(p) * TAU; s *= 1 + 0.3 * Math.sin(p * Math.PI); }
+      ctx.shadowColor = `hsl(${b.hue}, 100%, 60%)`;
+      ctx.shadowBlur = R * (0.4 + (p !== null ? 0.6 * (1 - p) : 0));
+      ctx.fillStyle = `hsl(${b.hue}, 100%, ${p !== null ? 75 : 62}%)`;
+      drawStar(0, 0, R * 1.1 * s, rot);
+      ctx.restore();
+    },
+  },
+
+  flower: {
+    init(b) { b.hue = rand(0, 360); },
+    draw(b, now) {
+      const p = b.react;
+      const n = 8;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.scale(b.scale, b.scale);
+      const spin = now / 2500 + (p !== null ? easeOut(p) * Math.PI : 0);
+      const out = p !== null ? Math.sin(p * Math.PI) : 0;
+      for (let i = 0; i < n; i++) {
+        const a = spin + (i / n) * TAU;
+        const d = R * (0.75 + 0.05 * Math.sin(now / 500 + i) + 0.9 * out);
+        const sz = R * (0.26 + 0.08 * out);
+        ctx.fillStyle = `hsl(${(b.hue + i * (360 / n)) % 360}, 100%, ${60 + 15 * out}%)`;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * d, Math.sin(a) * d, sz, 0, TAU);
+        ctx.fill();
+      }
+      ctx.fillStyle = `hsl(${b.hue + now / 20}, 100%, ${80 + 15 * out}%)`;
+      ctx.beginPath();
+      ctx.arc(0, 0, R * (0.38 + 0.12 * out), 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    },
+  },
+};
+
+function drawStar(x, y, r, rot) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = rot - Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? r * 0.45 : r;
+    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ---------- the jumping button ----------
+
+const param = new URLSearchParams(location.search).get("d");
+let designs = param ? param.split(",").filter(d => DESIGNS[d]) : [];
+if (!designs.length) designs = ALL_DESIGNS;
+let designIdx = Math.floor(Math.random() * designs.length);
+
+const b = { state: "hidden", t0: 0, x: 0, y: 0, scale: 0, react: null, taps: 0, need: 2, wait: 300 };
+
+function placeButton() {
+  const m = R * 1.7;
+  let x, y, tries = 0;
+  do {
+    x = rand(m, Math.max(m, W - m));
+    y = rand(m, Math.max(m, H - m));
+  } while (tries++ < 20 && Math.hypot(x - b.x, y - b.y) < Math.min(W, H) * 0.35);
+  b.x = x; b.y = y;
+}
+
+function appear(now) {
+  b.design = DESIGNS[designs[designIdx]];
+  designIdx = (designIdx + 1) % designs.length;
+  b.design.init(b);
+  placeButton();
+  b.taps = 0;
+  b.need = Math.floor(rand(TAPS_MIN, TAPS_MAX + 1));
+  b.react = null;
+  b.state = "appear"; b.t0 = now;
+}
+
+function tap(x, y) {
+  if (b.state !== "idle" && b.state !== "react") return;
+  if (b.taps >= b.need) return;
+  if (Math.hypot(x - b.x, y - b.y) > R * NEAR) return;
+  b.taps++;
+  b.state = "react"; b.t0 = performance.now();
+  if (b.design.onTap) b.design.onTap(b);
+}
+
+function frame(now) {
+  const el = now - b.t0;
+  switch (b.state) {
+    case "hidden":
+      if (el > b.wait) appear(now);
+      break;
+    case "appear":
+      b.scale = easeOutBack(clamp01(el / APPEAR_MS));
+      if (el >= APPEAR_MS) { b.scale = 1; b.state = "idle"; }
+      break;
+    case "react":
+      b.react = clamp01(el / REACT_MS);
+      if (el >= REACT_MS) {
+        b.react = null;
+        if (b.taps >= b.need) { b.state = "leave"; b.t0 = now; }
+        else b.state = "idle";
+      }
+      break;
+    case "leave":
+      b.scale = 1 - easeOut(clamp01(el / LEAVE_MS));
+      if (el >= LEAVE_MS) { b.state = "hidden"; b.t0 = now; b.wait = rand(...HIDDEN_MS); }
+      break;
+  }
+
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+  if (b.state !== "hidden" && b.scale > 0.001) b.design.draw(b, now);
+  requestAnimationFrame(frame);
+}
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  R = Math.max(28, Math.min(W, H) * 0.13);
+  if (b.state !== "hidden") {
+    const m = R * 1.7;
+    b.x = Math.min(Math.max(b.x, m), W - m);
+    b.y = Math.min(Math.max(b.y, m), H - m);
+  }
+}
+
+// ---------- input: only touches near the button do anything ----------
+
+window.addEventListener("pointerdown", e => { e.preventDefault(); tap(e.clientX, e.clientY); }, { passive: false });
+for (const ev of ["touchstart", "touchmove", "touchend", "gesturestart", "gesturechange",
+                  "contextmenu", "dblclick", "selectstart", "dragstart", "wheel"]) {
+  document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+}
+window.addEventListener("resize", resize);
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+resize();
+b.t0 = performance.now();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
