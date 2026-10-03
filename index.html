@@ -40,6 +40,7 @@ const ALL_DESIGNS = ["fingerprint", "orb", "star", "flower"];
 const TAPS_MIN = 2, TAPS_MAX = 3;   // taps before the button jumps away
 const HIDDEN_MS = [1000, 2000];     // how long the screen stays empty
 const REACT_MS = 900, APPEAR_MS = 450, LEAVE_MS = 400;
+const BUTTON_PX = 52;               // button radius in CSS pixels (see resize())
 const NEAR = 1.8;                   // touch counts if within NEAR * radius
 
 const canvas = document.getElementById("c");
@@ -321,7 +322,11 @@ function resize() {
   W = window.innerWidth; H = window.innerHeight;
   canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  R = Math.max(28, Math.min(W, H) * 0.13);
+  // A CSS pixel is roughly the same physical size on every device (~150/inch on phones,
+  // ~130/inch on iPads, ~100-110/inch on laptops), so a fixed CSS size keeps the button
+  // about fingertip-sized everywhere: slightly bigger on an iPad than on a phone, instead
+  // of scaling up with the screen. Small phones still get a bit less.
+  R = Math.min(BUTTON_PX, Math.min(W, H) * 0.14);
   if (b.state !== "hidden") {
     const m = R * 1.7;
     b.x = Math.min(Math.max(b.x, m), W - m);
