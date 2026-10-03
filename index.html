@@ -30,6 +30,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<label id="haptic" style="position:fixed;left:-100px;top:0;opacity:0"><input type="checkbox" switch></label>
 <script>
 "use strict";
 
@@ -37,7 +38,7 @@
 const ALL_DESIGNS = ["fingerprint", "orb", "star", "flower"];
 
 const TAPS_MIN = 2, TAPS_MAX = 3;   // taps before the button jumps away
-const HIDDEN_MS = [1500, 2500];     // how long the screen stays empty
+const HIDDEN_MS = [1000, 2000];     // how long the screen stays empty
 const REACT_MS = 900, APPEAR_MS = 450, LEAVE_MS = 400;
 const NEAR = 1.8;                   // touch counts if within NEAR * radius
 
@@ -274,6 +275,15 @@ function tap(x, y) {
   b.taps++;
   b.state = "react"; b.t0 = performance.now();
   if (b.design.onTap) b.design.onTap(b);
+  buzz();
+}
+
+// Android: real vibration. iOS has no vibration API, but Safari 18+ gives a light
+// haptic tick when a switch toggles, so on iPhone we toggle a hidden one.
+const hapticLabel = document.getElementById("haptic");
+function buzz() {
+  if (navigator.vibrate) navigator.vibrate([60, 80, 60]);
+  else hapticLabel.click();
 }
 
 function frame(now) {
